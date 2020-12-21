@@ -20,7 +20,7 @@ import (
 
 	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/client-go/util/keyutil"
-	)
+)
 
 const (
 	// PrivateKeyBlockType is a possible value for pem.Block.Type.
@@ -38,6 +38,7 @@ const (
 // Config contains the basic fields required for creating a certificate
 type Config struct {
 	Path         string // Writeto Dir
+	DefaultPath  string // Kubernetes default Dir
 	BaseName     string // Writeto file name
 	CAName       string // root ca map key
 	CommonName   string
@@ -51,8 +52,8 @@ type Config struct {
 // to the API Server's x509 certificate SubAltNames field. The values will
 // be passed directly to the x509.Certificate object.
 type AltNames struct {
-	DNSNames []string
-	IPs      []net.IP
+	DNSNames map[string]string
+	IPs      map[string]net.IP
 }
 
 // NewPrivateKey creates an RSA private key
@@ -87,9 +88,9 @@ func NewSelfSignedCACert(key crypto.Signer, commonName string, organization []st
 	return x509.ParseCertificate(certDERBytes)
 }
 
-// Create as ca
+// NewCaCertAndKey Create as ca.
 func NewCaCertAndKey(cfg Config) (*x509.Certificate, crypto.Signer, error) {
-	_, err := os.Stat(pathForKey(cfg.Path,cfg.BaseName))
+	_, err := os.Stat(pathForKey(cfg.Path, cfg.BaseName))
 	if !os.IsNotExist(err) {
 		return LoadCaCertAndKeyFromDisk(cfg)
 	}
@@ -105,18 +106,19 @@ func NewCaCertAndKey(cfg Config) (*x509.Certificate, crypto.Signer, error) {
 	return cert, key, nil
 }
 
-func LoadCaCertAndKeyFromDisk(cfg Config)(*x509.Certificate, crypto.Signer, error){
-	certs,err := certutil.CertsFromFile(pathForCert(cfg.Path,cfg.BaseName))
+// LoadCaCertAndKeyFromDisk load ca cert and key form disk.
+func LoadCaCertAndKeyFromDisk(cfg Config) (*x509.Certificate, crypto.Signer, error) {
+	certs, err := certutil.CertsFromFile(pathForCert(cfg.Path, cfg.BaseName))
 	if err != nil {
-		return nil,nil,err
+		return nil, nil, err
 	}
 	caCert := certs[0]
 
-	cakey,err := TryLoadKeyFromDisk(pathForKey(cfg.Path, cfg.BaseName))
+	cakey, err := TryLoadKeyFromDisk(pathForKey(cfg.Path, cfg.BaseName))
 	if err != nil {
-		return nil,nil,err
+		return nil, nil, err
 	}
-	return caCert,cakey,nil
+	return caCert, cakey, nil
 }
 
 // TryLoadKeyFromDisk tries to load the key from the disk and validates that it is valid
@@ -141,6 +143,7 @@ func TryLoadKeyFromDisk(pkiPath string) (crypto.Signer, error) {
 	return key, nil
 }
 
+//  NewCaCertAndKeyFromRoot cmd/kubeadm/app/util/pkiutil/pki_helpers.go NewCertAndKey
 func NewCaCertAndKeyFromRoot(cfg Config, caCert *x509.Certificate, caKey crypto.Signer) (*x509.Certificate, crypto.Signer, error) {
 	key, err := NewPrivateKey(x509.UnknownPublicKeyAlgorithm)
 	if err != nil {
@@ -167,13 +170,22 @@ func NewSignedCert(cfg Config, key crypto.Signer, caCert *x509.Certificate, caKe
 		return nil, errors.New("must specify at least one ExtKeyUsage")
 	}
 
+	var dnsNames []string
+	var ips []net.IP
+
+	for _, v := range cfg.AltNames.DNSNames {
+		dnsNames = append(dnsNames, v)
+	}
+	for _, v := range cfg.AltNames.IPs {
+		ips = append(ips, v)
+	}
 	certTmpl := x509.Certificate{
 		Subject: pkix.Name{
 			CommonName:   cfg.CommonName,
 			Organization: cfg.Organization,
 		},
-		DNSNames:     cfg.AltNames.DNSNames,
-		IPAddresses:  cfg.AltNames.IPs,
+		DNSNames:     dnsNames,
+		IPAddresses:  ips,
 		SerialNumber: serial,
 		NotBefore:    caCert.NotBefore,
 		NotAfter:     time.Now().Add(duration365d * cfg.Year).UTC(),
@@ -250,7 +262,7 @@ func WritePublicKey(pkiPath, name string, key crypto.PublicKey) error {
 	}
 	publicKeyPath := pathForPublicKey(pkiPath, name)
 	if err := keyutil.WriteKey(publicKeyPath, publicKeyBytes); err != nil {
-		return fmt.Errorf( "unable to write public key to file %s %s", publicKeyPath, err)
+		return fmt.Errorf("unable to write public key to file %s %s", publicKeyPath, err)
 	}
 
 	return nil

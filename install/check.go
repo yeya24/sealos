@@ -1,9 +1,17 @@
 package install
 
 import (
-	"github.com/wonderivan/logger"
+	"fmt"
 	"os"
+
+	"github.com/wonderivan/logger"
 )
+
+// SetHosts set hosts. if can't access to hostName, set /etc/hosts
+func SetHosts(hostIP, hostName string) {
+	cmd := fmt.Sprintf("cat /etc/hosts |grep %s || echo '%s %s' >> /etc/hosts", hostName, IpFormat(hostIP), hostName)
+	SSHConfig.CmdAsync(hostIP, cmd)
+}
 
 //CheckValid is
 func (s *SealosInstaller) CheckValid() {
@@ -32,6 +40,7 @@ func (s *SealosInstaller) CheckValid() {
 			logger.Error("[%s] ------------ check error", h)
 			os.Exit(1)
 		} else {
+			SetHosts(h, hostname)
 			if _, ok := dict[hostname]; !ok {
 				dict[hostname] = true //不冲突, 主机名加入字典
 			} else {

@@ -91,33 +91,150 @@ func TestDecodeIPs(t *testing.T) {
 		{
 			"test decode ips",
 			args{[]string{"192.168.0.1-192.168.0.3"}},
-			[]string{"192.168.0.1:22","192.168.0.2:22","192.168.0.3:22"},
+			[]string{"192.168.0.1:22", "192.168.0.2:22", "192.168.0.3:22"},
 		},
 		{
 			"test decode ips",
-			args{[]string{"192.168.0.1","192.168.0.3:23"}},
-			[]string{"192.168.0.1:22","192.168.0.3:23"},
+			args{[]string{"192.168.0.1", "192.168.0.3:23"}},
+			[]string{"192.168.0.1:22", "192.168.0.3:23"},
 		},
 		{
 			"test decode ips",
-			args{[]string{"192.168.0.1-192.168.0.3:23","192.168.0.5"}},
-			[]string{"192.168.0.1:23","192.168.0.2:23","192.168.0.3:23","192.168.0.5:22"},
+			args{[]string{"192.168.0.1-192.168.0.3:23", "192.168.0.5"}},
+			[]string{"192.168.0.1:23", "192.168.0.2:23", "192.168.0.3:23", "192.168.0.5:22"},
 		},
 		{
 			"test decode ips",
-			args{[]string{"192.168.0.1:24","192.168.0.3"}},
-			[]string{"192.168.0.1:24","192.168.0.3:22"},
+			args{[]string{"192.168.0.1:24", "192.168.0.3"}},
+			[]string{"192.168.0.1:24", "192.168.0.3:22"},
 		},
 		{
 			"test decode ips",
-			args{[]string{"192.168.0.1-192.168.0.3","192.168.0.4-192.168.0.6:25", "192.168.0.7:25","192.168.0.8"}},
-			[]string{"192.168.0.1:22","192.168.0.2:22","192.168.0.3:22","192.168.0.4:25","192.168.0.5:25","192.168.0.6:25","192.168.0.7:25","192.168.0.8:22"},
+			args{[]string{"192.168.0.1-192.168.0.3", "192.168.0.4-192.168.0.6:25", "192.168.0.7:25", "192.168.0.8"}},
+			[]string{"192.168.0.1:22", "192.168.0.2:22", "192.168.0.3:22", "192.168.0.4:25", "192.168.0.5:25", "192.168.0.6:25", "192.168.0.7:25", "192.168.0.8:22"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := DecodeIPs(tt.args.ips); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("DecodeIPs() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFileExist(t *testing.T) {
+	type args struct {
+		path string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{"file exist", args{"/home/louis/.ssh/id_rsa"}, true},
+		{"file not exist", args{"/home/louis/.ssh/id_rsa.public"}, false},
+		{"PkgFile", args{"/root/kube1.18.0.tar.gz"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FileExist(tt.args.path); got != tt.want {
+				t.Errorf("FileExist() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVersionToIntAll(t *testing.T) {
+	type args struct {
+		version string
+	}
+	tests := []struct {
+		name string
+		args args
+		want int
+	}{
+		{"test01", args{"v1.19.1"}, 1191},
+		{"test02", args{"v1.15.1"}, 1151},
+		{"test03", args{"v1.15.13"}, 11513},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := VersionToIntAll(tt.args.version); got != tt.want {
+				t.Errorf("VersionToInt() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetMajorMinorInt(t *testing.T) {
+	type args struct {
+		version string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		wantMajor int
+		wantMinor int
+	}{
+		{"test01", args{"v1.18.1"}, 118, 1},
+		{"test02", args{"v1.15.11"}, 115, 11},
+		{"test03", args{"v1.16.14"}, 116, 14},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotMajor, gotMinor := GetMajorMinorInt(tt.args.version)
+			if gotMajor != tt.wantMajor {
+				t.Errorf("GetMajorMinorInt() gotMajor = %v, want %v", gotMajor, tt.wantMajor)
+			}
+			if gotMinor != tt.wantMinor {
+				t.Errorf("GetMajorMinorInt() gotMinor = %v, want %v", gotMinor, tt.wantMinor)
+			}
+		})
+	}
+}
+
+func TestCanUpgradeByNewVersion(t *testing.T) {
+	type args struct {
+		new string
+		old string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{"test01", args{"v1.18.5", "v1.16.14"}, true},
+		{"test02", args{"v1.19.3", "v1.18.9"}, false},
+		{"test03", args{"v1.15.11", "v1.18.9"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := CanUpgradeByNewVersion(tt.args.new, tt.args.old); (err != nil) != tt.wantErr {
+				t.Errorf("CanUpgradeByNewVersion() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestFor120(t *testing.T) {
+	type args struct {
+		version string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{"test01",args{"v1.19.2"}, false},
+		{"test02",args{"v1.18.2"}, false},
+		{"test03",args{"v1.20.2"}, true},
+		{"test04",args{"v1.20.0-rc.0"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := For120(tt.args.version); got != tt.want {
+				t.Errorf("For120() = %v, want %v", got, tt.want)
 			}
 		})
 	}

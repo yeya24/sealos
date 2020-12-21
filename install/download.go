@@ -2,21 +2,22 @@ package install
 
 import (
 	"fmt"
-	"github.com/cuisongliu/sshcmd/pkg/cmd"
-	"github.com/cuisongliu/sshcmd/pkg/md5sum"
-	"github.com/wonderivan/logger"
 	"net/url"
 	"path"
 	"sync"
+
+	"github.com/fanux/sealos/pkg/sshcmd/cmd"
+	"github.com/fanux/sealos/pkg/sshcmd/md5sum"
+	"github.com/wonderivan/logger"
 )
 
 //location : url
 //md5
 //dst: /root
 //hook: cd /root && rm -rf kube && tar zxvf %s  && cd /root/kube/shell && sh init.sh
-func SendPackage(location string, hosts []string, dst string, before, after *string) {
-	location, md5 := downloadFile(location)
-	PkgUrl = location
+func SendPackage(location string, hosts []string, dst string, before, after *string) string {
+	var md5 string
+	location, md5 = downloadFile(location)
 	pkg := path.Base(location)
 	fullPath := fmt.Sprintf("%s/%s", dst, pkg)
 	mkDstDir := fmt.Sprintf("mkdir -p %s || true", dst)
@@ -31,8 +32,19 @@ func SendPackage(location string, hosts []string, dst string, before, after *str
 				logger.Debug("[%s]please wait for before hook", host)
 				_ = SSHConfig.CmdAsync(host, *before)
 			}
-			if SSHConfig.IsFilExist(host, fullPath) {
-				logger.Warn("[%s]SendPackage: file is exist", host)
+			if SSHConfig.IsFileExist(host, fullPath) {
+				if SSHConfig.ValidateMd5sumLocalWithRemote(host, location, fullPath) {
+					logger.Info("[%s]SendPackage:  %s file is exist and ValidateMd5 success", host, fullPath)
+				} else {
+					rm := fmt.Sprintf("rm -f %s", fullPath)
+					_ = SSHConfig.Cmd(host, rm)
+					// del then copy
+					if ok := SSHConfig.CopyForMD5(host, location, fullPath, md5); ok {
+						logger.Info("[%s]copy file md5 validate success", host)
+					} else {
+						logger.Error("[%s]copy file md5 validate failed", host)
+					}
+				}
 			} else {
 				if ok := SSHConfig.CopyForMD5(host, location, fullPath, md5); ok {
 					logger.Info("[%s]copy file md5 validate success", host)
@@ -47,13 +59,18 @@ func SendPackage(location string, hosts []string, dst string, before, after *str
 		}(host)
 	}
 	wm.Wait()
+	return location
+}
+
+func DownloadFile(location string) (filePATH, md5 string) {
+	return downloadFile(location)
 }
 
 //
 func downloadFile(location string) (filePATH, md5 string) {
 	if _, isUrl := isUrl(location); isUrl {
 		absPATH := "/tmp/sealos/" + path.Base(location)
-		if !cmd.IsFilExist(absPATH) {
+		if !cmd.IsFileExist(absPATH) {
 			//generator download cmd
 			dwnCmd := downloadCmd(location)
 			//os exec download command
@@ -76,7 +93,7 @@ func downloadCmd(url string) string {
 		if u.Scheme == "https" {
 			param = "--no-check-certificate"
 		}
-		c = fmt.Sprintf(" wget %s %s", param, url)
+		c = fmt.Sprintf(" wget -c %s %s", param, url)
 	}
 	return c
 }

@@ -1,10 +1,13 @@
 package install
 
 import (
-	"github.com/wonderivan/logger"
-	"gopkg.in/yaml.v2"
+	"fmt"
 	"io/ioutil"
 	"os"
+
+	"gopkg.in/yaml.v2"
+
+	"github.com/wonderivan/logger"
 )
 
 const defaultConfigPath = "/.sealos"
@@ -22,8 +25,9 @@ type SealConfig struct {
 	User       string
 	Passwd     string
 	PrivateKey string
+	PkPassword string
 	//ApiServer ex. apiserver.cluster.local
-	ApiServerDomian string
+	ApiServerDomain string
 
 	VIP     string
 	PkgURL  string
@@ -31,6 +35,13 @@ type SealConfig struct {
 	Repo    string
 	PodCIDR string
 	SvcCIDR string
+	//certs location
+	CertPath     string
+	CertEtcdPath string
+	//lvscare images
+	LvscareName string
+	LvscareTag  string
+	AliOss
 }
 
 //Dump is
@@ -46,7 +57,8 @@ func (c *SealConfig) Dump(path string) {
 	c.User = SSHConfig.User
 	c.Passwd = SSHConfig.Password
 	c.PrivateKey = SSHConfig.PkFile
-	c.ApiServerDomian = ApiServer
+	c.PkPassword = SSHConfig.PkPassword
+	c.ApiServerDomain = ApiServer
 	c.VIP = VIP
 	c.PkgURL = PkgUrl
 	c.Version = Version
@@ -56,7 +68,17 @@ func (c *SealConfig) Dump(path string) {
 
 	c.DnsDomain = DnsDomain
 	c.ApiServerCertSANs = ApiServerCertSANs
-
+	c.CertPath = CertPath
+	c.CertEtcdPath = CertEtcdPath
+	//lvscare
+	c.LvscareName = LvscareImage.Image
+	c.LvscareTag = LvscareImage.Tag
+	// oss
+	c.AliOss.AccessKeyId = AccessKeyId
+	c.AliOss.AccessKeySecrets = AccessKeySecrets
+	c.AliOss.OssEndpoint = OssEndpoint
+	c.AliOss.BucketName = BucketName
+	c.AliOss.ObjectPath = ObjectPath
 	y, err := yaml.Marshal(c)
 	if err != nil {
 		logger.Error("dump config file failed: %s", err)
@@ -90,7 +112,7 @@ func Dump(path string, content interface{}) error {
 }
 
 //Load is
-func (c *SealConfig) Load(path string) {
+func (c *SealConfig) Load(path string) (err error) {
 	if path == "" {
 		home, _ := os.UserHomeDir()
 		path = home + defaultConfigPath + defaultConfigFile
@@ -98,14 +120,12 @@ func (c *SealConfig) Load(path string) {
 
 	y, err := ioutil.ReadFile(path)
 	if err != nil {
-		logger.Error("read config file %s failed %s", path, err)
-		c.showDefaultConfig()
-		os.Exit(0)
+		return fmt.Errorf("read config file %s failed %w", path, err)
 	}
 
 	err = yaml.Unmarshal(y, c)
 	if err != nil {
-		logger.Error("unmarshal config file failed: %s", err)
+		return fmt.Errorf("unmarshal config file failed: %w", err)
 	}
 
 	MasterIPs = c.Masters
@@ -113,7 +133,8 @@ func (c *SealConfig) Load(path string) {
 	SSHConfig.User = c.User
 	SSHConfig.Password = c.Passwd
 	SSHConfig.PkFile = c.PrivateKey
-	ApiServer = c.ApiServerDomian
+	SSHConfig.PkPassword = c.PkPassword
+	ApiServer = c.ApiServerDomain
 	VIP = c.VIP
 	PkgUrl = c.PkgURL
 	Version = c.Version
@@ -123,6 +144,22 @@ func (c *SealConfig) Load(path string) {
 
 	DnsDomain = c.DnsDomain
 	ApiServerCertSANs = c.ApiServerCertSANs
+	CertPath = c.CertPath
+	CertEtcdPath = c.CertEtcdPath
+	//lvscare
+	LvscareImage.Image = c.LvscareName
+	LvscareImage.Tag = c.LvscareTag
+
+	// 优先使用使用命令行， 再使用配置文件
+	if AccessKeyId == "" || AccessKeySecrets == "" ||
+		OssEndpoint == "" || BucketName == "" || ObjectPath == "" {
+		AccessKeyId = c.AliOss.AccessKeyId
+		AccessKeySecrets = c.AliOss.AccessKeySecrets
+		OssEndpoint = c.AliOss.OssEndpoint
+		BucketName = c.AliOss.BucketName
+		ObjectPath = c.AliOss.ObjectPath
+	}
+	return
 }
 
 func Load(path string, content interface{}) error {
@@ -139,21 +176,24 @@ func Load(path string, content interface{}) error {
 	return nil
 }
 
-func (c *SealConfig) showDefaultConfig() {
+func (c *SealConfig) ShowDefaultConfig() {
 	c.Masters = []string{"192.168.0.2", "192.168.0.2", "192.168.0.2"}
 	c.Nodes = []string{"192.168.0.3", "192.168.0.4"}
 	c.User = "root"
-	c.Passwd = "123"
+	c.Passwd = "123456"
 	c.PrivateKey = "/root/.ssh/id_rsa"
-	c.ApiServerDomian = "apiserver.cluster.local"
+	c.ApiServerDomain = "apiserver.cluster.local"
 	c.VIP = "10.103.97.2"
-	c.PkgURL = "/root/kube1.14.2.tar.gz"
-	c.Version = "v1.14.2"
+	c.PkgURL = "/root/kube1.17.13.tar.gz"
+	c.Version = "v1.17.13"
 	c.Repo = "k8s.gcr.io"
 	c.PodCIDR = "100.64.0.0/10"
 	c.SvcCIDR = "10.96.0.0/12"
-	c.ApiServerDomian = "cluster.local"
 	c.ApiServerCertSANs = []string{"apiserver.cluster.local", "127.0.0.1"}
+	c.CertPath = "/root/.sealos/pki"
+	c.CertEtcdPath = "/root/.sealos/pki/etcd"
+	c.LvscareName = "fanux/lvscare"
+	c.LvscareTag = "latest"
 
 	y, err := yaml.Marshal(c)
 	if err != nil {

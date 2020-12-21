@@ -6,3 +6,8 @@ sealos
 .idea
 oss-config
 ossutil64
+main.exe
+main
+dist
+.vscode
+test/Note.md

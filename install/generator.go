@@ -9,71 +9,42 @@ import (
 	"text/template"
 )
 
-const TemplateText = string(`apiVersion: kubeadm.k8s.io/v1beta1
-kind: ClusterConfiguration
-kubernetesVersion: {{.Version}}
-controlPlaneEndpoint: "{{.ApiServer}}:6443"
-imageRepository: {{.Repo}}
-networking:
-  # dnsDomain: cluster.local
-  podSubnet: {{.PodCIDR}}
-  serviceSubnet: {{.SvcCIDR}}
-apiServer:
-  certSANs:
-  - 127.0.0.1
-  - {{.ApiServer}}
-  {{range .Masters -}}
-  - {{.}}
-  {{end -}}
-  - {{.VIP}}
-  extraArgs:
-    feature-gates: TTLAfterFinished=true
-  extraVolumes:
-  - name: localtime
-    hostPath: /etc/localtime
-    mountPath: /etc/localtime
-    readOnly: true
-    pathType: File
-controllerManager:
-  extraArgs:
-    feature-gates: TTLAfterFinished=true
-  extraVolumes:
-  - hostPath: /etc/localtime
-    mountPath: /etc/localtime
-    name: localtime
-    readOnly: true
-    pathType: File
-scheduler:
-  extraArgs:
-    feature-gates: TTLAfterFinished=true
-  extraVolumes:
-  - hostPath: /etc/localtime
-    mountPath: /etc/localtime
-    name: localtime
-    readOnly: true
-    pathType: File
----
-apiVersion: kubeproxy.config.k8s.io/v1alpha1
-kind: KubeProxyConfiguration
-mode: "ipvs"
-ipvs:
-  excludeCIDRs: 
-  - "{{.VIP}}/32"`)
-
 var ConfigType string
 
 func Config() {
 	switch ConfigType {
 	case "kubeadm":
 		printlnKubeadmConfig()
+	case "join":
+		printlnJoinKubeadmConfig()
 	default:
 		printlnKubeadmConfig()
 	}
 }
 
+func joinKubeadmConfig() string {
+	var sb strings.Builder
+	if For120(Version) {
+		sb.Write([]byte(JoinCPTemplateTextV1beate2Container))
+	} else {
+		sb.Write([]byte(JoinCPTemplateTextV1beta2))
+	}
+	return sb.String()
+}
+
+func printlnJoinKubeadmConfig() {
+	fmt.Println(joinKubeadmConfig())
+}
+
 func kubeadmConfig() string {
 	var sb strings.Builder
-	sb.Write([]byte(TemplateText))
+	// kubernetes gt 1.20, use Containerd instead of docker
+	if For120(Version) {
+		sb.Write([]byte(InitTemplateTextV1bate2))
+	} else {
+		sb.Write([]byte(InitTemplateTextV1beta1))
+	}
+
 	return sb.String()
 }
 
@@ -84,6 +55,31 @@ func printlnKubeadmConfig() {
 //Template is
 func Template() []byte {
 	return TemplateFromTemplateContent(kubeadmConfig())
+}
+
+// JoinTemplate is generate JoinCP nodes configuration by master ip.
+func JoinTemplate(ip string) []byte {
+	return JoinTemplateFromTemplateContent(joinKubeadmConfig(), ip)
+}
+
+func JoinTemplateFromTemplateContent(templateContent, ip string) []byte {
+	tmpl, err := template.New("text").Parse(templateContent)
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("join template parse failed:", err)
+		}
+	}()
+	if err != nil {
+		panic(1)
+	}
+	var envMap = make(map[string]interface{})
+	envMap["Master0"] = IpFormat(MasterIPs[0])
+	envMap["Master"] = IpFormat(ip)
+	envMap["TokenDiscovery"] = JoinToken
+	envMap["TokenDiscoveryCAHash"] = TokenCaCertHash
+	var buffer bytes.Buffer
+	_ = tmpl.Execute(&buffer, envMap)
+	return buffer.Bytes()
 }
 
 func TemplateFromTemplateContent(templateContent string) []byte {
@@ -102,6 +98,7 @@ func TemplateFromTemplateContent(templateContent string) []byte {
 		masters = append(masters, IpFormat(h))
 	}
 	var envMap = make(map[string]interface{})
+	envMap["CertSANS"] = CertSANS
 	envMap["VIP"] = VIP
 	envMap["Masters"] = masters
 	envMap["Version"] = Version
@@ -109,6 +106,7 @@ func TemplateFromTemplateContent(templateContent string) []byte {
 	envMap["PodCIDR"] = PodCIDR
 	envMap["SvcCIDR"] = SvcCIDR
 	envMap["Repo"] = Repo
+	envMap["Master0"] = IpFormat(MasterIPs[0])
 	var buffer bytes.Buffer
 	_ = tmpl.Execute(&buffer, envMap)
 	return buffer.Bytes()
