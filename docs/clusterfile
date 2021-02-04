@@ -1,0 +1,55 @@
+```
+apiVersion: zlink.aliyun.com/v1alpha1
+kind: Cluster
+metadata:
+  name: my-cluster
+  annotation:
+    trident.aliyun-inc.com/etcd: "/data/etcd" 
+    trident.aliyun-inc.com/docker: "/var/lib/docker"
+  generation: 1 # 管理clusterAPI版本
+spec:
+  image: my-kubernetes:v1.18.3 # 集群镜像
+  env: # 基础镜像里的一些脚本和配置可获取到此环境变量
+  - DOMAIN=zlink.alibaba-inc.com
+  provider: ALI_CLOUD
+  ssh:
+    passwd: xxx
+    pk: xxx
+    pkPasswd: xxx
+    user: root
+  network:
+    interface: eth0
+    cniName: calico
+    podCIDR: 100.64.0.0/10
+    svcCIDR: 10.96.0.0/22
+    withoutCNI: true
+  certSANS:
+    - aliyun-inc.com
+    - 10.0.0.2
+    
+  masters:
+    cpu: 4
+    memory: 8
+    count: 3
+    systemDisk: 100
+    dataDisks:
+    - 100
+  # ipList:
+  #  - 192.168.0.2
+  #  - 192.168.0.3
+  #  - 192.168.0.4
+   nodes:
+    cpu: 5
+    memory: 8
+    count: 3
+    systemDisk: 100
+    dataDisks:
+    - 100
+  # ipList:
+  #  - 192.168.0.2
+  #  - 192.168.0.3
+  #  - 192.168.0.4
+  
+  status:
+    # ...集群创建后的信息
+```
