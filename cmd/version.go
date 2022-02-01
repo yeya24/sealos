@@ -1,4 +1,4 @@
-// Copyright © 2019 NAME HERE <EMAIL ADDRESS>
+// Copyright © 2021 sealos.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,31 +15,36 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/fanux/sealos/version"
+
+	"github.com/fanux/sealos/pkg/version"
 	"github.com/spf13/cobra"
 )
 
-// versionCmd represents the version command
+var shortPrint bool
+
 var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "show sealos version",
-	Long:  `show sealos version`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(version.VersionStr)
+	Use:     "version",
+	Short:   "version",
+	Args:    cobra.NoArgs,
+	Example: `sealos version`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		marshalled, err := json.Marshal(version.Get())
+		if err != nil {
+			return err
+		}
+		if shortPrint {
+			fmt.Println(version.Get().String())
+		} else {
+			fmt.Println(string(marshalled))
+		}
+		return nil
+
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// versionCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// versionCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	versionCmd.Flags().BoolVar(&shortPrint, "short", false, "if true, print just the version number.")
 }

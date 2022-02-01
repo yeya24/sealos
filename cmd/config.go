@@ -1,4 +1,4 @@
-// Copyright © 2019 NAME HERE <EMAIL ADDRESS>
+// Copyright © 2021 sealos.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,7 @@
 package cmd
 
 import (
-	"github.com/fanux/sealos/install"
-
+	config2 "github.com/fanux/sealos/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -25,13 +24,13 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "print config template to console",
 	Run: func(cmd *cobra.Command, args []string) {
-		install.Config()
+		config2.Config()
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(configCmd)
-	configCmd.Flags().StringVarP(&install.ConfigType, "type", "t", "kubeadm", "template type (Optional: kubeadm)")
+	configCmd.Flags().StringVarP(&config2.ConfigType, "type", "t", "kubeadm", "template type (Optional: kubeadm)")
 
 	// Here you will define your flags and configuration settings.
 
